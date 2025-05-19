@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Вход / Регистрация</title>
+  <style>
+    body { font-family: sans-serif; max-width: 400px; margin: 40px auto; padding: 0 10px; }
+    input, button { width: 100%; padding: 10px; margin-top: 10px; font-size: 16px; }
+    #status { margin-top: 15px; color: crimson; }
+    #resetBtn { display: none; margin-top: 10px; background: crimson; color: white; }
+  </style>
+</head>
+<body>
+  <h2>Приватный мессенджер</h2>
+
+  <input id="code" placeholder="6-значный код" maxlength="6" />
+  <input id="password" placeholder="Пароль" type="password" />
+  <button id="mainBtn" disabled>Введите код</button>
+  <button id="resetBtn">Сбросить тестера</button>
+  <div id="status"></div>
+
+  <script src="common.js"></script>
+  <script>
+    const codeInput = document.getElementById("code");
+    const passwordInput = document.getElementById("password");
+    const btn = document.getElementById("mainBtn");
+    const resetBtn = document.getElementById("resetBtn");
+    const status = document.getElementById("status");
+
+    let codeStatus = "invalid";
+
+    codeInput.addEventListener("input", async () => {
+      const code = codeInput.value.trim();
+      if (code.length !== 6) {
+        btn.textContent = "Введите код";
+        btn.disabled = true;
+        codeStatus = "invalid";
+        status.textContent = "";
+        resetBtn.style.display = "none";
+        return;
+      }
+
+      status.textContent = "Проверяю код...";
+      try {
+        const data = await apiCheckCode(code);
+        codeStatus = data.status;
+
+        if (codeStatus === "free") {
+          btn.textContent = "Зарегистрироваться";
+          btn.disabled = false;
+          status.textContent = "Код доступен для регистрации.";
+          resetBtn.style.display = "none";
+        } else if (codeStatus === "used") {
+          btn.textContent = "Войти";
+          btn.disabled = false;
+          status.textContent = "Код уже зарегистрирован.";
+          if (code === "770000") resetBtn.style.display = "block";
+          else resetBtn.style.display = "none";
+        } else {
+          btn.textContent = "Неверный код";
+          btn.disabled = true;
+          status.textContent = "Код не найден.";
+          resetBtn.style.display = "none";
+        }
+      } catch (e) {
+        status.textContent = "Ошибка проверки кода: " + e.message;
+      }
+    });
+
+    btn.addEventListener("click", async () => {
+      const code = codeInput.value.trim();
+      const password = passwordInput.value.trim();
+
+      if (codeStatus === "invalid") return;
+
+      if (!password) {
+        status.textContent = "Введите пароль.";
+        return;
+      }
+
+      status.textContent = codeStatus === "free" ? "Регистрирую..." : "Вхожу...";
+      btn.disabled = true;
+
+      try {
+        const data = await apiRegisterOrLogin(code, password);
+        if (data.ok) {
+          status.style.color = "green";
+          status.textContent = codeStatus === "free" ? "Успешная регистрация!" : "Вход выполнен!";
+          saveUserData(data.user, password);
+          setTimeout(() => {
+            location.href = "chat.html";
+          }, 1000);
+        } else {
+          status.style.color = "crimson";
+          status.textContent = "Ошибка: " + (data.message || "Неизвестная ошибка");
+        }
+      } catch (e) {
+        status.style.color = "crimson";
+        status.textContent = "Ошибка сети: " + e.message;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    resetBtn.addEventListener("click", async () => {
+      status.textContent = "Сбрасываю тестера...";
+      try {
+        const ok = await apiResetTester();
+        status.textContent = ok ? "Тестер сброшен!" : "Ошибка при сбросе.";
+      } catch (e) {
+        status.textContent = "Ошибка: " + e.message;
+      }
+    });
+  </script>
+</body>
+</html>
