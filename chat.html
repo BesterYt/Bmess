@@ -1,0 +1,128 @@
+<!-- В body добавляем форму для нового чата -->
+<div>
+    <input type="text" id="newChatId" placeholder="Введите ID пользователя (6 цифр)" maxlength="6" />
+    <button id="createChatBtn">Новый чат</button>
+  </div>
+  <div id="errorMsg" style="color: red;"></div>
+  
+  <script>
+    // ... Весь предыдущий код ...
+  
+    const newChatIdInput = document.getElementById("newChatId");
+    const createChatBtn = document.getElementById("createChatBtn");
+    const errorMsg = document.getElementById("errorMsg");
+  
+    let currentChatId = null;
+    let chatsData = {}; // chatId -> {messages}
+  
+    async function loadChats() {
+      const result = await getChats(userId);
+      if (userId === "770001") {
+        // Админ видит все пользователей и пароли
+        chatList.innerHTML = "";
+        for (const uid in result.users) {
+          const userData = result.users[uid];
+          const div = document.createElement("div");
+          div.className = "chatItem";
+          div.textContent = `Пользователь ${uid} - пароль: ${userData.password}`;
+          chatList.appendChild(div);
+  
+          // Показываем их чаты
+          for (const chatId in userData.chats) {
+            const chatDiv = document.createElement("div");
+            chatDiv.style.marginLeft = "10px";
+            chatDiv.textContent = `Чат: ${chatId} (сообщений: ${userData.chats[chatId].length})`;
+            chatList.appendChild(chatDiv);
+          }
+        }
+        chatWindow.style.display = "none";
+        messageInput.style.display = "none";
+        sendBtn.style.display = "none";
+        return;
+      }
+  
+      // Для обычных пользователей
+      chatsData = {};
+      chatList.innerHTML = "";
+      if (result.chats.length === 0) {
+        chatList.textContent = "Чатов пока нет.";
+        chatWindow.style.display = "none";
+        messageInput.style.display = "none";
+        sendBtn.style.display = "none";
+        return;
+      }
+  
+      result.chats.forEach(chat => {
+        chatsData[chat.chatId] = chat.messages;
+        const div = document.createElement("div");
+        div.className = "chatItem";
+        div.textContent = chat.chatId;
+        div.onclick = () => showChat(chat.chatId);
+        chatList.appendChild(div);
+      });
+    }
+  
+    function showChat(chatId) {
+      currentChatId = chatId;
+      chatWindow.style.display = "block";
+      messageInput.style.display = "block";
+      sendBtn.style.display = "block";
+  
+      renderMessages();
+    }
+  
+    function renderMessages() {
+      chatWindow.textContent = "";
+      if (!currentChatId || !chatsData[currentChatId]) return;
+      chatsData[currentChatId].forEach(msg => {
+        chatWindow.textContent += `${msg.from}: ${msg.text}\n`;
+      });
+      chatWindow.scrollTop = chatWindow.scrollHeight;
+    }
+  
+    sendBtn.onclick = async () => {
+      const msg = messageInput.value.trim();
+      if (!msg || !currentChatId) return;
+      messageInput.value = "";
+  
+      const res = await sendMessage(userId, currentChatId, msg);
+      if (res.success) {
+        chatsData[currentChatId].push({ from: userId, text: msg });
+        renderMessages();
+      } else {
+        alert("Ошибка при отправке сообщения");
+      }
+    };
+  
+    createChatBtn.onclick = async () => {
+      errorMsg.textContent = "";
+      const newId = newChatIdInput.value.trim();
+      if (!/^\d{6}$/.test(newId)) {
+        errorMsg.textContent = "Введите корректный 6-значный ID";
+        return;
+      }
+      if (newId === userId) {
+        errorMsg.textContent = "Нельзя создать чат с самим собой";
+        return;
+      }
+      const exists = await checkUser(newId);
+      if (!exists) {
+        errorMsg.textContent = "Пользователь с таким ID не зарегистрирован";
+        return;
+      }
+  
+      const createRes = await createChat(userId, newId);
+      if (createRes.chatId) {
+        // Обновляем список чатов
+        await loadChats();
+        newChatIdInput.value = "";
+        showChat(createRes.chatId);
+      } else {
+        errorMsg.textContent = "Не удалось создать чат";
+      }
+    };
+  
+    // Загружаем чаты сразу при заходе
+    loadChats();
+  </script>
+  
