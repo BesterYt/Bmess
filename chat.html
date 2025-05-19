@@ -1,128 +1,130 @@
-<!-- В body добавляем форму для нового чата -->
-<div>
-    <input type="text" id="newChatId" placeholder="Введите ID пользователя (6 цифр)" maxlength="6" />
-    <button id="createChatBtn">Новый чат</button>
-  </div>
-  <div id="errorMsg" style="color: red;"></div>
-  
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Чаты</title>
+  <style>
+    body { font-family: sans-serif; margin: 20px; }
+    #chatList { margin-bottom: 20px; }
+    .chat-item { cursor: pointer; padding: 8px; border: 1px solid #ccc; margin: 5px 0; }
+    .chat-item:hover { background: #f0f0f0; }
+    #messages { border: 1px solid #ccc; padding: 10px; height: 200px; overflow-y: scroll; }
+    #newChatInput { width: 100%; margin-top: 10px; padding: 5px; }
+  </style>
+</head>
+<body>
+
+  <h2>Привет, <span id="currentUser"></span></h2>
+
+  <h3>Ваши чаты:</h3>
+  <div id="chatList"></div>
+
+  <input type="text" id="newChatInput" placeholder="Новый ID (6 цифр)">
+  <button onclick="startNewChat()">Новый чат</button>
+
+  <h3 id="chatWith">Сообщения</h3>
+  <div id="messages"></div>
+
+  <input type="text" id="msgInput" placeholder="Введите сообщение">
+  <button onclick="sendMessage()">Отправить</button>
+
   <script>
-    // ... Весь предыдущий код ...
-  
-    const newChatIdInput = document.getElementById("newChatId");
-    const createChatBtn = document.getElementById("createChatBtn");
-    const errorMsg = document.getElementById("errorMsg");
-  
-    let currentChatId = null;
-    let chatsData = {}; // chatId -> {messages}
-  
+    const API_URL = "https://bmessange.ivantimockin19.workers.dev";
+    const id = localStorage.getItem("id");
+    const password = localStorage.getItem("password");
+
+    if (!id || !password) {
+      alert("Вы не вошли в систему!");
+      window.location.href = "index.html";
+    }
+
+    document.getElementById("currentUser").textContent = id;
+
+    let chats = [];
+    let currentChat = null;
+
     async function loadChats() {
-      const result = await getChats(userId);
-      if (userId === "770001") {
-        // Админ видит все пользователей и пароли
-        chatList.innerHTML = "";
-        for (const uid in result.users) {
-          const userData = result.users[uid];
-          const div = document.createElement("div");
-          div.className = "chatItem";
-          div.textContent = `Пользователь ${uid} - пароль: ${userData.password}`;
-          chatList.appendChild(div);
-  
-          // Показываем их чаты
-          for (const chatId in userData.chats) {
-            const chatDiv = document.createElement("div");
-            chatDiv.style.marginLeft = "10px";
-            chatDiv.textContent = `Чат: ${chatId} (сообщений: ${userData.chats[chatId].length})`;
-            chatList.appendChild(chatDiv);
-          }
-        }
-        chatWindow.style.display = "none";
-        messageInput.style.display = "none";
-        sendBtn.style.display = "none";
-        return;
-      }
-  
-      // Для обычных пользователей
-      chatsData = {};
-      chatList.innerHTML = "";
-      if (result.chats.length === 0) {
-        chatList.textContent = "Чатов пока нет.";
-        chatWindow.style.display = "none";
-        messageInput.style.display = "none";
-        sendBtn.style.display = "none";
-        return;
-      }
-  
-      result.chats.forEach(chat => {
-        chatsData[chat.chatId] = chat.messages;
+      const res = await fetch(`${API_URL}/chats`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, password }),
+      });
+      const data = await res.json();
+      chats = data.chats || [];
+      showChatList();
+    }
+
+    function showChatList() {
+      const list = document.getElementById("chatList");
+      list.innerHTML = "";
+      chats.forEach(cid => {
         const div = document.createElement("div");
-        div.className = "chatItem";
-        div.textContent = chat.chatId;
-        div.onclick = () => showChat(chat.chatId);
-        chatList.appendChild(div);
+        div.className = "chat-item";
+        div.textContent = "Чат с " + cid;
+        div.onclick = () => loadMessages(cid);
+        list.appendChild(div);
       });
     }
-  
-    function showChat(chatId) {
-      currentChatId = chatId;
-      chatWindow.style.display = "block";
-      messageInput.style.display = "block";
-      sendBtn.style.display = "block";
-  
-      renderMessages();
-    }
-  
-    function renderMessages() {
-      chatWindow.textContent = "";
-      if (!currentChatId || !chatsData[currentChatId]) return;
-      chatsData[currentChatId].forEach(msg => {
-        chatWindow.textContent += `${msg.from}: ${msg.text}\n`;
+
+    async function loadMessages(chatId) {
+      currentChat = chatId;
+      document.getElementById("chatWith").textContent = "Чат с " + chatId;
+      const res = await fetch(`${API_URL}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, password, chatId }),
       });
-      chatWindow.scrollTop = chatWindow.scrollHeight;
+      const data = await res.json();
+      const box = document.getElementById("messages");
+      box.innerHTML = "";
+      data.messages.forEach(msg => {
+        const line = document.createElement("div");
+        line.textContent = `${msg.from}: ${msg.text}`;
+        box.appendChild(line);
+      });
+      box.scrollTop = box.scrollHeight;
     }
-  
-    sendBtn.onclick = async () => {
-      const msg = messageInput.value.trim();
-      if (!msg || !currentChatId) return;
-      messageInput.value = "";
-  
-      const res = await sendMessage(userId, currentChatId, msg);
-      if (res.success) {
-        chatsData[currentChatId].push({ from: userId, text: msg });
-        renderMessages();
-      } else {
-        alert("Ошибка при отправке сообщения");
-      }
-    };
-  
-    createChatBtn.onclick = async () => {
-      errorMsg.textContent = "";
-      const newId = newChatIdInput.value.trim();
-      if (!/^\d{6}$/.test(newId)) {
-        errorMsg.textContent = "Введите корректный 6-значный ID";
+
+    async function sendMessage() {
+      const text = document.getElementById("msgInput").value;
+      if (!currentChat || !text) return;
+      await fetch(`${API_URL}/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, password, to: currentChat, text }),
+      });
+      document.getElementById("msgInput").value = "";
+      loadMessages(currentChat);
+    }
+
+    async function startNewChat() {
+      const newId = document.getElementById("newChatInput").value;
+      if (newId.length !== 6) {
+        alert("ID должен быть 6 цифр");
         return;
       }
-      if (newId === userId) {
-        errorMsg.textContent = "Нельзя создать чат с самим собой";
+      const res = await fetch(`${API_URL}/checkUser`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: newId }),
+      });
+      const data = await res.json();
+      if (!data.exists) {
+        alert("Такого пользователя нет.");
         return;
       }
-      const exists = await checkUser(newId);
-      if (!exists) {
-        errorMsg.textContent = "Пользователь с таким ID не зарегистрирован";
-        return;
+      if (!chats.includes(newId)) {
+        chats.push(newId);
+        await fetch(`${API_URL}/addChat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id, password, newChatId: newId }),
+        });
       }
-  
-      const createRes = await createChat(userId, newId);
-      if (createRes.chatId) {
-        // Обновляем список чатов
-        await loadChats();
-        newChatIdInput.value = "";
-        showChat(createRes.chatId);
-      } else {
-        errorMsg.textContent = "Не удалось создать чат";
-      }
-    };
-  
-    // Загружаем чаты сразу при заходе
+      showChatList();
+    }
+
     loadChats();
   </script>
-  
+</body>
+</html>
